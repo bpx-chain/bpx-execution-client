@@ -887,6 +887,6 @@ func getGenesis(genesisFlag string, testnetFlag bool) (*core.Genesis, error) {
 	case testnetFlag:
 		return core.DefaultTestnetGenesisBlock(), nil
 	default:
-		return nil, fmt.Errorf("no genesis flag provided")
+		return nil, errors.New("no genesis flag provided")
 	}
 }
