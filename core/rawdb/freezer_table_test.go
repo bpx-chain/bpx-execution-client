@@ -658,6 +658,13 @@ func TestFreezerOffset(t *testing.T) {
 	}
 }
 
+func assertTableSize(t *testing.T, f *freezerTable, size int) {
+	t.Helper()
+	if got, err := f.size(); got != uint64(size) {
+		t.Fatalf("expected size of %d bytes, got %d, err: %v", size, got, err)
+	}
+}
+
 func TestTruncateTail(t *testing.T) {
 	t.Parallel()
 	rm, wm, sg := metrics.NewMeter(), metrics.NewMeter(), metrics.NewGauge()
@@ -692,6 +699,9 @@ func TestTruncateTail(t *testing.T) {
 		5: getChunk(20, 0xaa),
 		6: getChunk(20, 0x11),
 	})
+	// maxFileSize*fileCount + headBytes + indexFileSize - hiddenBytes
+	expected := 20*7 + 48 - 0
+	assertTableSize(t, f, expected)
 
 	// truncate single element( item 0 ), deletion is only supported at file level
 	f.truncateTail(1)
@@ -707,6 +717,8 @@ func TestTruncateTail(t *testing.T) {
 		5: getChunk(20, 0xaa),
 		6: getChunk(20, 0x11),
 	})
+	expected = 20*7 + 48 - 20
+	assertTableSize(t, f, expected)
 
 	// Reopen the table, the deletion information should be persisted as well
 	f.Close()
@@ -739,6 +751,8 @@ func TestTruncateTail(t *testing.T) {
 		5: getChunk(20, 0xaa),
 		6: getChunk(20, 0x11),
 	})
+	expected = 20*5 + 36 - 0
+	assertTableSize(t, f, expected)
 
 	// Reopen the table, the above testing should still pass
 	f.Close()
@@ -760,6 +774,23 @@ func TestTruncateTail(t *testing.T) {
 		6: getChunk(20, 0x11),
 	})
 
+	// truncate 3 more elements( item 2, 3, 4), the file 1 should be deleted
+	// file 2 should only contain item 5
+	f.truncateTail(5)
+	checkRetrieveError(t, f, map[uint64]error{
+		0: errOutOfBounds,
+		1: errOutOfBounds,
+		2: errOutOfBounds,
+		3: errOutOfBounds,
+		4: errOutOfBounds,
+	})
+	checkRetrieve(t, f, map[uint64][]byte{
+		5: getChunk(20, 0xaa),
+		6: getChunk(20, 0x11),
+	})
+	expected = 20*3 + 24 - 20
+	assertTableSize(t, f, expected)
+
 	// truncate all, the entire freezer should be deleted
 	f.truncateTail(7)
 	checkRetrieveError(t, f, map[uint64]error{
@@ -771,6 +802,8 @@ func TestTruncateTail(t *testing.T) {
 		5: errOutOfBounds,
 		6: errOutOfBounds,
 	})
+	expected = 12
+	assertTableSize(t, f, expected)
 }
 
 func TestTruncateHead(t *testing.T) {
@@ -977,6 +1010,52 @@ func TestSequentialReadByteLimit(t *testing.T) {
 				t.Fatal(err)
 			}
 			items, err := f.RetrieveItems(0, tc.items, tc.limit)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if have, want := len(items), tc.want; have != want {
+				t.Fatalf("test %d: want %d items, have %d ", i, want, have)
+			}
+			for ii, have := range items {
+				want := getChunk(10, ii)
+				if !bytes.Equal(want, have) {
+					t.Fatalf("test %d: data corruption item %d: have\n%x\n, want \n%x\n", i, ii, have, want)
+				}
+			}
+			f.Close()
+		}
+	}
+}
+
+// TestSequentialReadNoByteLimit tests the batch-read if maxBytes is not specified.
+// Freezer should return the requested items regardless the size limitation.
+func TestSequentialReadNoByteLimit(t *testing.T) {
+	rm, wm, sg := metrics.NewMeter(), metrics.NewMeter(), metrics.NewGauge()
+	fname := fmt.Sprintf("batchread-3-%d", rand.Uint64())
+	{ // Fill table
+		f, err := newTable(os.TempDir(), fname, rm, wm, sg, 100, true, false)
+		if err != nil {
+			t.Fatal(err)
+		}
+		// Write 10 bytes 30 times,
+		// Splitting it at every 100 bytes (10 items)
+		writeChunks(t, f, 30, 10)
+		f.Close()
+	}
+	for i, tc := range []struct {
+		items uint64
+		want  int
+	}{
+		{1, 1},
+		{30, 30},
+		{31, 30},
+	} {
+		{
+			f, err := newTable(os.TempDir(), fname, rm, wm, sg, 100, true, false)
+			if err != nil {
+				t.Fatal(err)
+			}
+			items, err := f.RetrieveItems(0, tc.items, 0)
 			if err != nil {
 				t.Fatal(err)
 			}
