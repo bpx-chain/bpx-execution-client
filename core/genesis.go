@@ -536,7 +536,7 @@ func DefaultGenesisBlock() *Genesis {
 		ExtraData:  hexutil.MustDecode("0x0924b4483ec210cb0341d84383db4ee7f55323bfc5bcf969b1e1b5f2064beb87"),
 		GasLimit:   0x1c9c380,
 		Difficulty: big.NewInt(0),
-		Alloc:      decodePrealloc(mainnetAllocData),
+		Alloc:      make(GenesisAlloc, 0),
 	}
 }
 
@@ -548,7 +548,7 @@ func DefaultTestnetGenesisBlock() *Genesis {
 		ExtraData:  hexutil.MustDecode("0x71eb8a93d989ee02852bf8494cfddc89eee45a656b95397a8e0e1cc3bdee48f4"),
 		GasLimit:   0x1c9c380,
 		Difficulty: big.NewInt(0),
-		Alloc:      decodePrealloc(testnetAllocData),
+		Alloc:      make(GenesisAlloc, 0),
 	}
 }
 
