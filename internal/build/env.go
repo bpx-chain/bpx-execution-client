@@ -99,7 +99,7 @@ func Env() Environment {
 
 // LocalEnv returns build environment metadata gathered from git.
 func LocalEnv() Environment {
-	env := applyEnvFlags(Environment{Name: "local", Repo: "bpx-network/bpx-execution-client"})
+	env := applyEnvFlags(Environment{Name: "local", Repo: "bpx-chain/bpx-execution-client"})
 
 	head := readGitFile("HEAD")
 	if fields := strings.Fields(head); len(fields) == 2 {

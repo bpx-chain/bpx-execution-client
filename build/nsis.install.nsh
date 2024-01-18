@@ -3,9 +3,9 @@ InstallDir "$InstDir"
 OutFile "${OUTPUTFILE}" # set through command line arguments
 
 # Links for "Add/Remove Programs"
-!define HELPURL "https://github.com/bpx-network/bpx-execution-client/issues"
-!define UPDATEURL "https://github.com/bpx-network/bpx-execution-client/releases"
-!define ABOUTURL "https://github.com/bpx-network/bpx-execution-client"
+!define HELPURL "https://github.com/bpx-chain/bpx-execution-client/issues"
+!define UPDATEURL "https://github.com/bpx-chain/bpx-execution-client/releases"
+!define ABOUTURL "https://github.com/bpx-chain/bpx-execution-client"
 !define /date NOW "%Y%m%d"
 
 PageEx license

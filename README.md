@@ -39,7 +39,7 @@ make all
 
 ## Usage
 
-> :warning: **You need both [Beacon Client](https://github.com/bpx-network/bpx-beacon-client) and Execution Client to synchronize with the network.**
+> :warning: **You need both [Beacon Client](https://github.com/bpx-chain/bpx-beacon-client) and Execution Client to synchronize with the network.**
 
 ### Windows
 1. Find the "BPX Execution Client" group in the Start Menu.
