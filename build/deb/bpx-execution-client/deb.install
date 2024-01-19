@@ -1,5 +1,5 @@
-{{range .Executables}}
 build/bin/{{.BinaryName}} usr/bin
-{{end}}
+{{- if eq .BinaryName "bpx-geth" }}
 build/deb/bpx-execution-client/completions/bash/bpx-geth etc/bash_completion.d
 build/deb/bpx-execution-client/completions/zsh/_bpx-geth usr/share/zsh/vendor-completions
+{{end -}}
