@@ -108,7 +108,7 @@ var (
 	// A debian package is created for all executables listed here.
 	debEthereum = debPackage{
 		Name:        "bpx-execution-client",
-		Version:     params.VersionWithMeta,
+		Version:     params.Version,
 		Executables: debExecutables,
 	}
 
@@ -129,18 +129,8 @@ var (
 		"golang-go":   "/usr/lib/go",
 	}
 
-	// This is the version of Go that will be downloaded by
-	//
-	//     go run ci.go install -dlgo
-	dlgoVersion = "1.20.3"
-
-	// This is the version of Go that will be used to bootstrap the PPA builder.
-	//
-	// This version is fine to be old and full of security holes, we just use it
-	// to build the latest Go. Don't change it. If it ever becomes insufficient,
-	// we need to switch over to a recursive builder to jumpt across supported
-	// versions.
-	gobootVersion = "1.19.6"
+	// This is where the tests should be unpacked.
+	executionSpecTestsDir = "tests/spec-tests"
 )
 
 var GOBIN, _ = filepath.Abs(filepath.Join("build", "bin"))
@@ -178,6 +168,8 @@ func main() {
 		doWindowsInstaller(os.Args[2:])
 	case "purge":
 		doPurge(os.Args[2:])
+	case "sanitycheck":
+		doSanityCheck()
 	default:
 		log.Fatal("unknown command ", os.Args[1])
 	}
@@ -193,19 +185,23 @@ func doInstall(cmdline []string) {
 		staticlink = flag.Bool("static", false, "Create statically-linked executable")
 	)
 	flag.CommandLine.Parse(cmdline)
+	env := build.Env()
 
 	// Configure the toolchain.
 	tc := build.GoToolchain{GOARCH: *arch, CC: *cc}
 	if *dlgo {
 		csdb := build.MustLoadChecksums("build/checksums.txt")
-		tc.Root = build.DownloadGo(csdb, dlgoVersion)
+		tc.Root = build.DownloadGo(csdb)
 	}
-	// Disable CLI markdown doc generation in release builds and enable linking
-	// the CKZG library since we can make it portable here.
-	buildTags := []string{"urfave_cli_no_docs", "ckzg"}
+	// Disable CLI markdown doc generation in release builds.
+	buildTags := []string{"urfave_cli_no_docs"}
+
+	// Enable linking the CKZG library since we can make it work with additional flags.
+	if env.UbuntuVersion != "trusty" {
+		buildTags = append(buildTags, "ckzg")
+	}
 
 	// Configure the build.
-	env := build.Env()
 	gobuild := tc.Go("build", buildFlags(env, *staticlink, buildTags)...)
 
 	// arm64 CI builders are memory-constrained and can't handle concurrent builds,
@@ -282,16 +278,30 @@ func doTest(cmdline []string) {
 		coverage = flag.Bool("coverage", false, "Whether to record code coverage")
 		verbose  = flag.Bool("v", false, "Whether to log verbosely")
 		race     = flag.Bool("race", false, "Execute the race detector")
+		short    = flag.Bool("short", false, "Pass the 'short'-flag to go test")
+		cachedir = flag.String("cachedir", "./build/cache", "directory for caching downloads")
 	)
 	flag.CommandLine.Parse(cmdline)
+
+	// Get test fixtures.
+	csdb := build.MustLoadChecksums("build/checksums.txt")
+	downloadSpecTestFixtures(csdb, *cachedir)
 
 	// Configure the toolchain.
 	tc := build.GoToolchain{GOARCH: *arch, CC: *cc}
 	if *dlgo {
-		csdb := build.MustLoadChecksums("build/checksums.txt")
-		tc.Root = build.DownloadGo(csdb, dlgoVersion)
+		tc.Root = build.DownloadGo(csdb)
 	}
-	gotest := tc.Go("test", "-tags=ckzg")
+	gotest := tc.Go("test")
+
+	// CI needs a bit more time for the statetests (default 10m).
+	gotest.Args = append(gotest.Args, "-timeout=20m")
+
+	// Enable CKZG backend in CI.
+	gotest.Args = append(gotest.Args, "-tags=ckzg")
+
+	// Enable integration-tests
+	gotest.Args = append(gotest.Args, "-tags=integrationtests")
 
 	// Test a single package at a time. CI builders are slow
 	// and some tests run into timeouts under load.
@@ -305,6 +315,9 @@ func doTest(cmdline []string) {
 	if *race {
 		gotest.Args = append(gotest.Args, "-race")
 	}
+	if *short {
+		gotest.Args = append(gotest.Args, "-short")
+	}
 
 	packages := []string{"./..."}
 	if len(flag.CommandLine.Args()) > 0 {
@@ -312,6 +325,25 @@ func doTest(cmdline []string) {
 	}
 	gotest.Args = append(gotest.Args, packages...)
 	build.MustRun(gotest)
+}
+
+// downloadSpecTestFixtures downloads and extracts the execution-spec-tests fixtures.
+func downloadSpecTestFixtures(csdb *build.ChecksumDB, cachedir string) string {
+	executionSpecTestsVersion, err := build.Version(csdb, "spec-tests")
+	if err != nil {
+		log.Fatal(err)
+	}
+	ext := ".tar.gz"
+	base := "fixtures_develop" // TODO(MariusVanDerWijden) rename once the version becomes part of the filename
+	url := fmt.Sprintf("https://github.com/ethereum/execution-spec-tests/releases/download/v%s/%s%s", executionSpecTestsVersion, base, ext)
+	archivePath := filepath.Join(cachedir, base+ext)
+	if err := csdb.DownloadFile(url, archivePath); err != nil {
+		log.Fatal(err)
+	}
+	if err := build.ExtractArchive(archivePath, executionSpecTestsDir); err != nil {
+		log.Fatal(err)
+	}
+	return filepath.Join(cachedir, base)
 }
 
 // doLint runs golangci-lint on requested packages.
@@ -327,15 +359,17 @@ func doLint(cmdline []string) {
 
 	linter := downloadLinter(*cachedir)
 	lflags := []string{"run", "--config", ".golangci.yml"}
-	build.MustRunCommand(linter, append(lflags, packages...)...)
+	build.MustRunCommandWithOutput(linter, append(lflags, packages...)...)
 	fmt.Println("You have achieved perfection.")
 }
 
 // downloadLinter downloads and unpacks golangci-lint.
 func downloadLinter(cachedir string) string {
-	const version = "1.51.1"
-
 	csdb := build.MustLoadChecksums("build/checksums.txt")
+	version, err := build.Version(csdb, "golangci")
+	if err != nil {
+		log.Fatal(err)
+	}
 	arch := runtime.GOARCH
 	ext := ".tar.gz"
 
@@ -695,6 +729,10 @@ func doDebian(cmdline []string) {
 // to bootstrap the builder Go.
 func downloadGoBootstrapSources(cachedir string) string {
 	csdb := build.MustLoadChecksums("build/checksums.txt")
+	gobootVersion, err := build.Version(csdb, "ppa-builder")
+	if err != nil {
+		log.Fatal(err)
+	}
 	file := fmt.Sprintf("go%s.src.tar.gz", gobootVersion)
 	url := "https://dl.google.com/go/" + file
 	dst := filepath.Join(cachedir, file)
@@ -707,6 +745,10 @@ func downloadGoBootstrapSources(cachedir string) string {
 // downloadGoSources downloads the Go source tarball.
 func downloadGoSources(cachedir string) string {
 	csdb := build.MustLoadChecksums("build/checksums.txt")
+	dlgoVersion, err := build.Version(csdb, "golang")
+	if err != nil {
+		log.Fatal(err)
+	}
 	file := fmt.Sprintf("go%s.src.tar.gz", dlgoVersion)
 	url := "https://dl.google.com/go/" + file
 	dst := filepath.Join(cachedir, file)
@@ -783,13 +825,17 @@ func (d debExecutable) Package() string {
 	return d.BinaryName
 }
 
-func newDebMetadata(distro string, goboot string, env build.Environment, t time.Time, name string, version string, exes []debExecutable) debMetadata {
+func newDebMetadata(distro, goboot, author string, env build.Environment, t time.Time, name string, version string, exes []debExecutable) debMetadata {
+	if author == "" {
+		// No signing key, use default author.
+		author = "BPX Network <hello@bpxchain.cc>"
+	}
 	return debMetadata{
 		GoBootPackage: goboot,
 		GoBootPath:    debGoBootPaths[goboot],
 		PackageName:   name,
 		Env:           env,
-		Author:        "BPX Network <hello@bpxchain.cc>",
+		Author:        author,
 		Distro:        distro,
 		Version:       version,
 		Time:          t.Format(time.RFC1123Z),
@@ -867,10 +913,14 @@ func stageDebianSource(tmpdir string, meta debMetadata) (pkgdir string) {
 	build.Render("build/deb/"+meta.PackageName+"/deb.changelog", filepath.Join(debian, "changelog"), 0644, meta)
 	build.Render("build/deb/"+meta.PackageName+"/deb.control", filepath.Join(debian, "control"), 0644, meta)
 	build.Render("build/deb/"+meta.PackageName+"/deb.copyright", filepath.Join(debian, "copyright"), 0644, meta)
-	build.Render("build/deb/"+meta.PackageName+"/deb.install", filepath.Join(debian, "install"), 0644, meta)
-	build.Render("build/deb/"+meta.PackageName+"/deb.docs", filepath.Join(debian, "docs"), 0644, meta)
 	build.RenderString("8\n", filepath.Join(debian, "compat"), 0644, meta)
 	build.RenderString("3.0 (native)\n", filepath.Join(debian, "source/format"), 0644, meta)
+	for _, exe := range meta.Executables {
+		install := filepath.Join(debian, meta.ExeName(exe)+".install")
+		docs := filepath.Join(debian, meta.ExeName(exe)+".docs")
+		build.Render("build/deb/"+meta.PackageName+"/deb.install", install, 0644, exe)
+		build.Render("build/deb/"+meta.PackageName+"/deb.docs", docs, 0644, exe)
+	}
 	return pkgdir
 }
 
@@ -928,7 +978,7 @@ func doWindowsInstaller(cmdline []string) {
 	// Build the installer. This assumes that all the needed files have been previously
 	// built (don't mix building and packaging to keep cross compilation complexity to a
 	// minimum).
-	version := strings.Split(params.VersionWithMeta, ".")
+	version := strings.Split(params.Version, ".")
 	if env.Commit != "" {
 		version[2] += "-" + env.Commit[:8]
 	}
@@ -1001,4 +1051,8 @@ func doPurge(cmdline []string) {
 	if err := build.AzureBlobstoreDelete(auth, blobs); err != nil {
 		log.Fatal(err)
 	}
+}
+
+func doSanityCheck() {
+	build.DownloadAndVerifyChecksums(build.MustLoadChecksums("build/checksums.txt"))
 }
