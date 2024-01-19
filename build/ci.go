@@ -694,7 +694,7 @@ func doDebian(cmdline []string) {
 	for _, pkg := range debPackages {
 		for distro, goboot := range debDistroGoBoots {
 			// Prepare the debian package with the go-ethereum sources.
-			meta := newDebMetadata(distro, goboot, env, now, pkg.Name, pkg.Version, pkg.Executables)
+			meta := newDebMetadata(distro, goboot, "", env, now, pkg.Name, pkg.Version, pkg.Executables)
 			pkgdir := stageDebianSource(*workdir, meta)
 
 			// Add bootstrapper Go source code
