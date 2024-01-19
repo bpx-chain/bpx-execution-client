@@ -913,14 +913,10 @@ func stageDebianSource(tmpdir string, meta debMetadata) (pkgdir string) {
 	build.Render("build/deb/"+meta.PackageName+"/deb.changelog", filepath.Join(debian, "changelog"), 0644, meta)
 	build.Render("build/deb/"+meta.PackageName+"/deb.control", filepath.Join(debian, "control"), 0644, meta)
 	build.Render("build/deb/"+meta.PackageName+"/deb.copyright", filepath.Join(debian, "copyright"), 0644, meta)
+	build.Render("build/deb/"+meta.PackageName+"/deb.install", filepath.Join(debian, "install"), 0644, meta)
+	build.Render("build/deb/"+meta.PackageName+"/deb.docs", filepath.Join(debian, "docs"), 0644, meta)
 	build.RenderString("8\n", filepath.Join(debian, "compat"), 0644, meta)
 	build.RenderString("3.0 (native)\n", filepath.Join(debian, "source/format"), 0644, meta)
-	for _, exe := range meta.Executables {
-		install := filepath.Join(debian, meta.ExeName(exe)+".install")
-		docs := filepath.Join(debian, meta.ExeName(exe)+".docs")
-		build.Render("build/deb/"+meta.PackageName+"/deb.install", install, 0644, exe)
-		build.Render("build/deb/"+meta.PackageName+"/deb.docs", docs, 0644, exe)
-	}
 	return pkgdir
 }
 
