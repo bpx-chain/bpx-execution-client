@@ -1,11 +1,11 @@
-Name "geth ${MAJORVERSION}.${MINORVERSION}.${BUILDVERSION}" # VERSION variables set through command line arguments
+Name "BPX Execution Client ${MAJORVERSION}.${MINORVERSION}.${BUILDVERSION}" # VERSION variables set through command line arguments
 InstallDir "$InstDir"
 OutFile "${OUTPUTFILE}" # set through command line arguments
 
 # Links for "Add/Remove Programs"
-!define HELPURL "https://github.com/ethereum/go-ethereum/issues"
-!define UPDATEURL "https://github.com/ethereum/go-ethereum/releases"
-!define ABOUTURL "https://github.com/ethereum/go-ethereum#ethereum-go"
+!define HELPURL "https://github.com/bpx-chain/bpx-execution-client/issues"
+!define UPDATEURL "https://github.com/bpx-chain/bpx-execution-client/releases"
+!define ABOUTURL "https://github.com/bpx-chain/bpx-execution-client"
 !define /date NOW "%Y%m%d"
 
 PageEx license
@@ -19,19 +19,21 @@ Section "Geth" GETH_IDX
 
   # Create start menu launcher
   createDirectory "$SMPROGRAMS\${APPNAME}"
-  createShortCut "$SMPROGRAMS\${APPNAME}\${APPNAME}.lnk" "$INSTDIR\geth.exe"
-  createShortCut "$SMPROGRAMS\${APPNAME}\Attach.lnk" "$INSTDIR\geth.exe" "attach"
+  createShortCut "$SMPROGRAMS\${APPNAME}\${APPNAME}.lnk" "$INSTDIR\bpx-geth.exe" "--syncmode snap --http"
+  createShortCut "$SMPROGRAMS\${APPNAME}\${APPNAME} (Testnet).lnk" "$INSTDIR\bpx-geth.exe" "--testnet --syncmode snap --http"
+  createShortCut "$SMPROGRAMS\${APPNAME}\Attach.lnk" "$INSTDIR\bpx-geth.exe" "attach"
+  createShortCut "$SMPROGRAMS\${APPNAME}\Attach (Testnet).lnk" "$INSTDIR\bpx-geth.exe" 'attach --datadir "$PROFILE\.bpxchain\execution\testnet"'
   createShortCut "$SMPROGRAMS\${APPNAME}\Uninstall.lnk" "$INSTDIR\uninstall.exe"
 
   # Firewall - remove rules (if exists)
-  SimpleFC::AdvRemoveRule "Geth incoming peers (TCP:30303)"
-  SimpleFC::AdvRemoveRule "Geth outgoing peers (TCP:30303)"
-  SimpleFC::AdvRemoveRule "Geth UDP discovery (UDP:30303)"
+  SimpleFC::AdvRemoveRule "BPX Execution Client incoming peers (TCP:30303)"
+  SimpleFC::AdvRemoveRule "BPX Execution Client outgoing peers (TCP:30303)"
+  SimpleFC::AdvRemoveRule "BPX Execution Client UDP discovery (UDP:30303)"
 
   # Firewall - add rules
-  SimpleFC::AdvAddRule "Geth incoming peers (TCP:30303)" ""  6 1 1 2147483647 1 "$INSTDIR\geth.exe" "" "" "Ethereum" 30303 "" "" ""
-  SimpleFC::AdvAddRule "Geth outgoing peers (TCP:30303)" ""  6 2 1 2147483647 1 "$INSTDIR\geth.exe" "" "" "Ethereum" "" 30303 "" ""
-  SimpleFC::AdvAddRule "Geth UDP discovery (UDP:30303)" "" 17 2 1 2147483647 1 "$INSTDIR\geth.exe" "" "" "Ethereum" "" 30303 "" ""
+  SimpleFC::AdvAddRule "BPX Execution Client incoming peers (TCP:30303)" ""  6 1 1 2147483647 1 "$INSTDIR\bpx-geth.exe" "" "" "BPX Execution Client" 30303 "" "" ""
+  SimpleFC::AdvAddRule "BPX Execution Client outgoing peers (TCP:30303)" ""  6 2 1 2147483647 1 "$INSTDIR\bpx-geth.exe" "" "" "BPX Execution Client" "" 30303 "" ""
+  SimpleFC::AdvAddRule "BPX Execution Client UDP discovery (UDP:30303)" "" 17 2 1 2147483647 1 "$INSTDIR\bpx-geth.exe" "" "" "BPX Execution Client" "" 30303 "" ""
 
   # Set default IPC endpoint (https://github.com/ethereum/EIPs/issues/147)
   ${EnvVarUpdate} $0 "ETHEREUM_SOCKET" "R" "HKLM" "\\.\pipe\geth.ipc"

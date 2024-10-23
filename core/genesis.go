@@ -412,10 +412,8 @@ func (g *Genesis) configOrDefault(ghash common.Hash) *params.ChainConfig {
 		return g.Config
 	case ghash == params.MainnetGenesisHash:
 		return params.MainnetChainConfig
-	case ghash == params.SepoliaGenesisHash:
-		return params.SepoliaChainConfig
-	case ghash == params.GoerliGenesisHash:
-		return params.GoerliChainConfig
+	case ghash == params.TestnetGenesisHash:
+		return params.TestnetChainConfig
 	default:
 		return params.AllEthashProtocolChanges
 	}
@@ -534,48 +532,23 @@ func (g *Genesis) MustCommit(db ethdb.Database, triedb *trie.Database) *types.Bl
 func DefaultGenesisBlock() *Genesis {
 	return &Genesis{
 		Config:     params.MainnetChainConfig,
-		Nonce:      66,
-		ExtraData:  hexutil.MustDecode("0x11bbe8db4e347b4e8c937c1c8370e4b5ed33adb3db69cbdb7a38e1e50b1b82fa"),
-		GasLimit:   5000,
-		Difficulty: big.NewInt(17179869184),
-		Alloc:      decodePrealloc(mainnetAllocData),
-	}
-}
-
-// DefaultGoerliGenesisBlock returns the Görli network genesis block.
-func DefaultGoerliGenesisBlock() *Genesis {
-	return &Genesis{
-		Config:     params.GoerliChainConfig,
-		Timestamp:  1548854791,
-		ExtraData:  hexutil.MustDecode("0x22466c6578692069732061207468696e6722202d204166726900000000000000e0a2bd4258d2768837baa26a28fe71dc079f84c70000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"),
-		GasLimit:   10485760,
-		Difficulty: big.NewInt(1),
-		Alloc:      decodePrealloc(goerliAllocData),
-	}
-}
-
-// DefaultSepoliaGenesisBlock returns the Sepolia network genesis block.
-func DefaultSepoliaGenesisBlock() *Genesis {
-	return &Genesis{
-		Config:     params.SepoliaChainConfig,
 		Nonce:      0,
-		ExtraData:  []byte("Sepolia, Athens, Attica, Greece!"),
+		ExtraData:  hexutil.MustDecode("0x0924b4483ec210cb0341d84383db4ee7f55323bfc5bcf969b1e1b5f2064beb87"),
 		GasLimit:   0x1c9c380,
-		Difficulty: big.NewInt(0x20000),
-		Timestamp:  1633267481,
-		Alloc:      decodePrealloc(sepoliaAllocData),
+		Difficulty: big.NewInt(0),
+		Alloc:      make(GenesisAlloc, 0),
 	}
 }
 
-// DefaultHoleskyGenesisBlock returns the Holesky network genesis block.
-func DefaultHoleskyGenesisBlock() *Genesis {
+// DefaultTestnetGenesisBlock returns the testnet genesis block.
+func DefaultTestnetGenesisBlock() *Genesis {
 	return &Genesis{
-		Config:     params.HoleskyChainConfig,
-		Nonce:      0x1234,
-		GasLimit:   0x17d7840,
-		Difficulty: big.NewInt(0x01),
-		Timestamp:  1695902100,
-		Alloc:      decodePrealloc(holeskyAllocData),
+		Config:     params.TestnetChainConfig,
+		Nonce:      0,
+		ExtraData:  hexutil.MustDecode("0x71eb8a93d989ee02852bf8494cfddc89eee45a656b95397a8e0e1cc3bdee48f4"),
+		GasLimit:   0x1c9c380,
+		Difficulty: big.NewInt(0),
+		Alloc:      make(GenesisAlloc, 0),
 	}
 }
 

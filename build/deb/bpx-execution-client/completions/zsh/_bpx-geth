@@ -15,4 +15,4 @@ _geth_zsh_autocomplete() {
   fi
 }
 
-compdef _geth_zsh_autocomplete geth
+compdef _geth_zsh_autocomplete bpx-geth

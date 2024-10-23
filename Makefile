@@ -9,9 +9,9 @@ GO ?= latest
 GORUN = go run
 
 geth:
-	$(GORUN) build/ci.go install ./cmd/geth
+	$(GORUN) build/ci.go install ./cmd/bpx-geth
 	@echo "Done building."
-	@echo "Run \"$(GOBIN)/geth\" to launch geth."
+	@echo "Run \"$(GOBIN)/bpx-geth\" to launch bpx-geth."
 
 all:
 	$(GORUN) build/ci.go install

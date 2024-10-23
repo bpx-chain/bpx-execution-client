@@ -13,4 +13,4 @@ _geth_bash_autocomplete() {
   fi
 }
 
-complete -o bashdefault -o default -o nospace -F _geth_bash_autocomplete geth
+complete -o bashdefault -o default -o nospace -F _geth_bash_autocomplete bpx-geth

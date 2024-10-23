@@ -99,7 +99,7 @@ func Env() Environment {
 
 // LocalEnv returns build environment metadata gathered from git.
 func LocalEnv() Environment {
-	env := applyEnvFlags(Environment{Name: "local", Repo: "ethereum/go-ethereum"})
+	env := applyEnvFlags(Environment{Name: "local", Repo: "bpx-chain/bpx-execution-client"})
 
 	head := readGitFile("HEAD")
 	if fields := strings.Fields(head); len(fields) == 2 {
@@ -112,6 +112,9 @@ func LocalEnv() Environment {
 		if commit := commitRe.FindString(head); commit != "" && env.Commit == "" {
 			env.Commit = commit
 		}
+        if info, err := os.Stat(".git/objects"); err == nil && info.IsDir() && env.Tag == "" {
+		    env.Tag = firstLine(RunGit("tag", "-l", "--points-at", "HEAD"))
+	    }
 		return env
 	}
 	if env.Commit == "" {

@@ -205,10 +205,9 @@ func (w *worker) buildPayload(args *BuildPayloadArgs) (*Payload, error) {
 		timer := time.NewTimer(0)
 		defer timer.Stop()
 
-		// Setup the timer for terminating the process if SECONDS_PER_SLOT (12s in
-		// the Mainnet configuration) have passed since the point in time identified
-		// by the timestamp parameter.
-		endTimer := time.NewTimer(time.Second * 12)
+		// Setup the timer for terminating the process if 13 seconds have passed since
+        // the point in time identified by the timestamp parameter.
+		endTimer := time.NewTimer(time.Second * 13)
 
 		fullParams := &generateParams{
 			timestamp:   args.Timestamp,

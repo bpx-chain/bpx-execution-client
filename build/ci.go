@@ -29,7 +29,7 @@ Available commands are:
 	lint                                                                                        -- runs certain pre-selected linters
 	archive    [ -arch architecture ] [ -type zip|tar ] [ -signer key-envvar ] [ -signify key-envvar ] [ -upload dest ] -- archives build artifacts
 	importkeys                                                                                  -- imports signing keys from env
-	debsrc     [ -signer key-id ] [ -upload dest ]                                              -- creates a debian source package
+	deb                                                                                         -- creates a debian package
 	nsis                                                                                        -- creates a Windows NSIS installer
 	purge      [ -store blobstore ] [ -days threshold ]                                         -- purges old archives from the blobstore
 
@@ -63,7 +63,7 @@ var (
 	// Files that end up in the geth*.zip archive.
 	gethArchiveFiles = []string{
 		"COPYING",
-		executablePath("geth"),
+		executablePath("bpx-geth"),
 	}
 
 	// Files that end up in the geth-alltools*.zip archive.
@@ -72,7 +72,7 @@ var (
 		executablePath("abigen"),
 		executablePath("bootnode"),
 		executablePath("evm"),
-		executablePath("geth"),
+		executablePath("bpx-geth"),
 		executablePath("rlpdump"),
 		executablePath("clef"),
 	}
@@ -81,19 +81,19 @@ var (
 	debExecutables = []debExecutable{
 		{
 			BinaryName:  "abigen",
-			Description: "Source code generator to convert Ethereum contract definitions into easy to use, compile-time type-safe Go packages.",
+			Description: "Source code generator to convert BPX contract definitions into easy to use, compile-time type-safe Go packages.",
 		},
 		{
 			BinaryName:  "bootnode",
-			Description: "Ethereum bootnode.",
+			Description: "BPX execution chain bootnode.",
 		},
 		{
 			BinaryName:  "evm",
-			Description: "Developer utility version of the EVM (Ethereum Virtual Machine) that is capable of running bytecode snippets within a configurable environment and execution mode.",
+			Description: "Developer utility version of the EVM that is capable of running bytecode snippets within a configurable environment and execution mode.",
 		},
 		{
-			BinaryName:  "geth",
-			Description: "Ethereum CLI client.",
+			BinaryName:  "bpx-geth",
+			Description: "BPX execution client.",
 		},
 		{
 			BinaryName:  "rlpdump",
@@ -101,13 +101,13 @@ var (
 		},
 		{
 			BinaryName:  "clef",
-			Description: "Ethereum account management tool.",
+			Description: "BPX account management tool.",
 		},
 	}
 
 	// A debian package is created for all executables listed here.
 	debEthereum = debPackage{
-		Name:        "ethereum",
+		Name:        "bpx-execution-client",
 		Version:     params.Version,
 		Executables: debExecutables,
 	}
@@ -120,20 +120,12 @@ var (
 	// Distros for which packages are created.
 	// Note: vivid is unsupported because there is no golang-1.6 package for it.
 	// Note: the following Ubuntu releases have been officially deprecated on Launchpad:
-	//   wily, yakkety, zesty, artful, cosmic, disco, eoan, groovy, hirsuite, impish,
-	//   kinetic
+	//   wily, yakkety, zesty, artful, cosmic, disco, eoan, groovy, hirsuite, impish
 	debDistroGoBoots = map[string]string{
-		"trusty": "golang-1.11", // 14.04, EOL: 04/2024
-		"xenial": "golang-go",   // 16.04, EOL: 04/2026
-		"bionic": "golang-go",   // 18.04, EOL: 04/2028
-		"focal":  "golang-go",   // 20.04, EOL: 04/2030
-		"jammy":  "golang-go",   // 22.04, EOL: 04/2032
-		"lunar":  "golang-go",   // 23.04, EOL: 01/2024
-		"mantic": "golang-go",   // 23.10, EOL: 07/2024
+		"stable":   "golang-go",
 	}
 
 	debGoBootPaths = map[string]string{
-		"golang-1.11": "/usr/lib/go-1.11",
 		"golang-go":   "/usr/lib/go",
 	}
 
@@ -170,8 +162,8 @@ func main() {
 		doArchive(os.Args[2:])
 	case "docker":
 		doDocker(os.Args[2:])
-	case "debsrc":
-		doDebianSource(os.Args[2:])
+	case "deb":
+		doDebian(os.Args[2:])
 	case "nsis":
 		doWindowsInstaller(os.Args[2:])
 	case "purge":
@@ -422,8 +414,8 @@ func doArchive(cmdline []string) {
 	var (
 		env      = build.Env()
 		basegeth = archiveBasename(*arch, params.ArchiveVersion(env.Commit))
-		geth     = "geth-" + basegeth + ext
-		alltools = "geth-alltools-" + basegeth + ext
+		geth     = "bpx-execution-client-" + basegeth + ext
+		alltools = "bpx-execution-client-alltools-" + basegeth + ext
 	)
 	maybeSkipArchive(env)
 	if err := build.WriteArchive(geth, gethArchiveFiles); err != nil {
@@ -499,7 +491,7 @@ func maybeSkipArchive(env build.Environment) {
 		log.Printf("skipping archive creation because this is a PR build")
 		os.Exit(0)
 	}
-	if env.Branch != "master" && !strings.HasPrefix(env.Tag, "v1.") {
+	if env.Branch != "main" && env.Branch != "dev" && !strings.HasPrefix(env.Tag, "1.") {
 		log.Printf("skipping archive creation because branch %q, tag %q is not on the inclusion list", env.Branch, env.Tag)
 		os.Exit(0)
 	}
@@ -539,7 +531,7 @@ func doDocker(cmdline []string) {
 	var tags []string
 
 	switch {
-	case env.Branch == "master":
+	case env.Branch == "main":
 		tags = []string{"latest"}
 	case strings.HasPrefix(env.Tag, "v1."):
 		tags = []string{"stable", fmt.Sprintf("release-1.%d", params.VersionMinor), "v" + params.Version}
@@ -672,12 +664,9 @@ func doDocker(cmdline []string) {
 }
 
 // Debian Packaging
-func doDebianSource(cmdline []string) {
+func doDebian(cmdline []string) {
 	var (
 		cachedir = flag.String("cachedir", "./build/cache", `Filesystem path to cache the downloaded Go bundles at`)
-		signer   = flag.String("signer", "", `Signing key name, also used as package author`)
-		upload   = flag.String("upload", "", `Where to upload the source package (usually "ethereum/ethereum")`)
-		sshUser  = flag.String("sftp-user", "", `Username for SFTP upload (usually "geth-ci")`)
 		workdir  = flag.String("workdir", "", `Output directory for packages (uses temp dir if unset)`)
 		now      = time.Now()
 	)
@@ -687,12 +676,6 @@ func doDebianSource(cmdline []string) {
 	tc := new(build.GoToolchain)
 	maybeSkipArchive(env)
 
-	// Import the signing key.
-	if key := getenvBase64("PPA_SIGNING_KEY"); len(key) > 0 {
-		gpg := exec.Command("gpg", "--import")
-		gpg.Stdin = bytes.NewReader(key)
-		build.MustRun(gpg)
-	}
 	// Download and verify the Go source packages.
 	var (
 		gobootbundle = downloadGoBootstrapSources(*cachedir)
@@ -711,7 +694,7 @@ func doDebianSource(cmdline []string) {
 	for _, pkg := range debPackages {
 		for distro, goboot := range debDistroGoBoots {
 			// Prepare the debian package with the go-ethereum sources.
-			meta := newDebMetadata(distro, goboot, *signer, env, now, pkg.Name, pkg.Version, pkg.Executables)
+			meta := newDebMetadata(distro, goboot, "", env, now, pkg.Name, pkg.Version, pkg.Executables)
 			pkgdir := stageDebianSource(*workdir, meta)
 
 			// Add bootstrapper Go source code
@@ -734,23 +717,10 @@ func doDebianSource(cmdline []string) {
 				log.Fatalf("Failed to copy Go module dependencies: %v", err)
 			}
 			// Run the packaging and upload to the PPA
-			debuild := exec.Command("debuild", "-S", "-sa", "-us", "-uc", "-d", "-Zxz", "-nc")
+			debuild := exec.Command("debuild", "-b", "-sa", "-us", "-uc", "-d", "-Zxz", "-nc")
 			debuild.Dir = pkgdir
 			build.MustRun(debuild)
 
-			var (
-				basename  = fmt.Sprintf("%s_%s", meta.Name(), meta.VersionString())
-				source    = filepath.Join(*workdir, basename+".tar.xz")
-				dsc       = filepath.Join(*workdir, basename+".dsc")
-				changes   = filepath.Join(*workdir, basename+"_source.changes")
-				buildinfo = filepath.Join(*workdir, basename+"_source.buildinfo")
-			)
-			if *signer != "" {
-				build.MustRunCommand("debsign", changes)
-			}
-			if *upload != "" {
-				ppaUpload(*workdir, *upload, *sshUser, []string{source, dsc, changes, buildinfo})
-			}
 		}
 	}
 }
@@ -788,29 +758,6 @@ func downloadGoSources(cachedir string) string {
 	return dst
 }
 
-func ppaUpload(workdir, ppa, sshUser string, files []string) {
-	p := strings.Split(ppa, "/")
-	if len(p) != 2 {
-		log.Fatal("-upload PPA name must contain single /")
-	}
-	if sshUser == "" {
-		sshUser = p[0]
-	}
-	incomingDir := fmt.Sprintf("~%s/ubuntu/%s", p[0], p[1])
-	// Create the SSH identity file if it doesn't exist.
-	var idfile string
-	if sshkey := getenvBase64("PPA_SSH_KEY"); len(sshkey) > 0 {
-		idfile = filepath.Join(workdir, "sshkey")
-		if !common.FileExist(idfile) {
-			os.WriteFile(idfile, sshkey, 0600)
-		}
-	}
-	// Upload
-	dest := sshUser + "@ppa.launchpad.net"
-	if err := build.UploadSFTP(idfile, dest, incomingDir, files); err != nil {
-		log.Fatal(err)
-	}
-}
 
 func getenvBase64(variable string) []byte {
 	dec, err := base64.StdEncoding.DecodeString(os.Getenv(variable))
@@ -881,7 +828,7 @@ func (d debExecutable) Package() string {
 func newDebMetadata(distro, goboot, author string, env build.Environment, t time.Time, name string, version string, exes []debExecutable) debMetadata {
 	if author == "" {
 		// No signing key, use default author.
-		author = "Ethereum Builds <fjl@ethereum.org>"
+		author = "BPX Network <hello@bpxchain.cc>"
 	}
 	return debMetadata{
 		GoBootPackage: goboot,
@@ -946,7 +893,7 @@ func (meta debMetadata) ExeConflicts(exe debExecutable) string {
 		// be preferred and the conflicting files should be handled via
 		// alternates. We might do this eventually but using a conflict is
 		// easier now.
-		return "ethereum, " + exe.Package()
+		return "bpx-execution-client, " + exe.Package()
 	}
 	return ""
 }
@@ -966,14 +913,10 @@ func stageDebianSource(tmpdir string, meta debMetadata) (pkgdir string) {
 	build.Render("build/deb/"+meta.PackageName+"/deb.changelog", filepath.Join(debian, "changelog"), 0644, meta)
 	build.Render("build/deb/"+meta.PackageName+"/deb.control", filepath.Join(debian, "control"), 0644, meta)
 	build.Render("build/deb/"+meta.PackageName+"/deb.copyright", filepath.Join(debian, "copyright"), 0644, meta)
+	build.Render("build/deb/"+meta.PackageName+"/deb.install", filepath.Join(debian, "install"), 0644, meta)
+	build.Render("build/deb/"+meta.PackageName+"/deb.docs", filepath.Join(debian, "docs"), 0644, meta)
 	build.RenderString("8\n", filepath.Join(debian, "compat"), 0644, meta)
 	build.RenderString("3.0 (native)\n", filepath.Join(debian, "source/format"), 0644, meta)
-	for _, exe := range meta.Executables {
-		install := filepath.Join(debian, meta.ExeName(exe)+".install")
-		docs := filepath.Join(debian, meta.ExeName(exe)+".docs")
-		build.Render("build/deb/"+meta.PackageName+"/deb.install", install, 0644, exe)
-		build.Render("build/deb/"+meta.PackageName+"/deb.docs", docs, 0644, exe)
-	}
 	return pkgdir
 }
 
@@ -1003,7 +946,7 @@ func doWindowsInstaller(cmdline []string) {
 			continue
 		}
 		allTools = append(allTools, filepath.Base(file))
-		if filepath.Base(file) == "geth.exe" {
+		if filepath.Base(file) == "bpx-geth.exe" {
 			gethTool = file
 		} else {
 			devTools = append(devTools, file)
@@ -1035,7 +978,7 @@ func doWindowsInstaller(cmdline []string) {
 	if env.Commit != "" {
 		version[2] += "-" + env.Commit[:8]
 	}
-	installer, err := filepath.Abs("geth-" + archiveBasename(*arch, params.ArchiveVersion(env.Commit)) + ".exe")
+	installer, err := filepath.Abs("bpx-execution-client-" + archiveBasename(*arch, params.ArchiveVersion(env.Commit)) + ".exe")
 	if err != nil {
 		log.Fatalf("Failed to convert installer file path: %v", err)
 	}
